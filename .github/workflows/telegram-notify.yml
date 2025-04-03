@@ -1,12 +1,10 @@
 name: Telegram Notifications
-
 on:
   push:
     branches: [ dev ]
   pull_request:
     types: [ closed ]
     branches: [ dev ]
-
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -16,22 +14,37 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
       - name: Get commit details
         id: commit-details
         run: |
+          # 이벤트 타입에 따른 변수 설정
           if [ "${{ github.event_name }}" == "push" ]; then
-            echo "message=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
-            echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
-            echo "event_type=푸시됨" >> $GITHUB_OUTPUT
-            echo "url=${{ github.event.head_commit.url }}" >> $GITHUB_OUTPUT
+            BEFORE_SHA="${{ github.event.before }}"
+            AFTER_SHA="${{ github.event.after }}"
+            AUTHOR="$(git log -1 --pretty=%an)"
+            EVENT_TYPE="푸시됨"
+            DETAIL_URL="${{ github.event.head_commit.url }}"
           else
-            echo "message=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
-            echo "author=${{ github.event.pull_request.user.login }}" >> $GITHUB_OUTPUT
-            echo "event_type=병합됨" >> $GITHUB_OUTPUT
-            echo "url=${{ github.event.pull_request.html_url }}" >> $GITHUB_OUTPUT
+            BEFORE_SHA="${{ github.event.pull_request.base.sha }}"
+            AFTER_SHA="${{ github.event.pull_request.head.sha }}"
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            EVENT_TYPE="병합됨"
+            DETAIL_URL="${{ github.event.pull_request.html_url }}"
+            echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
           fi
-
+          
+          # 공통 로직
+          COMMIT_LIST=$(git log -n 5 --pretty=format:"- %s" ${BEFORE_SHA}..${AFTER_SHA})
+          TOTAL_COMMITS=$(git rev-list --count ${BEFORE_SHA}..${AFTER_SHA})
+          
+          # 결과 저장
+          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          echo "event_type=$EVENT_TYPE" >> $GITHUB_OUTPUT
+          echo "url=$DETAIL_URL" >> $GITHUB_OUTPUT
+          echo "total_commits=$TOTAL_COMMITS" >> $GITHUB_OUTPUT
+          echo "message<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_LIST" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
       - name: Send Telegram notification
         uses: appleboy/telegram-action@master
         with:
@@ -43,5 +56,9 @@ jobs:
             
             👤 사용자: *${{ steps.commit-details.outputs.author }}*
             📝 이벤트: *${{ steps.commit-details.outputs.event_type }}*
-            📝 메시지: ${{ steps.commit-details.outputs.message }}
+            ${{ github.event_name == 'pull_request' && format('🔖 PR 제목: *{0}*', steps.commit-details.outputs.pr_title) || '' }}
+            
+            📋 커밋 목록 (${{ steps.commit-details.outputs.total_commits }}개 중 최대 5개):
+            ${{ steps.commit-details.outputs.message }}
+            
             🔗 [상세 정보 보기](${{ steps.commit-details.outputs.url }})
