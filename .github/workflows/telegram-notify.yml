@@ -2,13 +2,10 @@ name: Telegram Notifications
 on:
   push:
     branches: [ dev ]
-  pull_request:
-    types: [ closed ]
-    branches: [ dev ]
+  # pull_request 부분 제거됨
 jobs:
   notify:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -17,31 +14,27 @@ jobs:
       - name: Get commit details
         id: commit-details
         run: |
-          # 이벤트 타입에 따른 변수 설정
-          if [ "${{ github.event_name }}" == "push" ]; then
-            BEFORE_SHA="${{ github.event.before }}"
-            AFTER_SHA="${{ github.event.after }}"
-            AUTHOR="$(git log -1 --pretty=%an)"
-            EVENT_TYPE="푸시됨"
-            DETAIL_URL="${{ github.event.head_commit.url }}"
-          else
-            BEFORE_SHA="${{ github.event.pull_request.base.sha }}"
-            AFTER_SHA="${{ github.event.pull_request.head.sha }}"
-            AUTHOR="${{ github.event.pull_request.user.login }}"
-            EVENT_TYPE="병합됨"
-            DETAIL_URL="${{ github.event.pull_request.html_url }}"
-            echo "pr_title=${{ github.event.pull_request.title }}" >> $GITHUB_OUTPUT
-          fi
+          # 푸시된 커밋 범위 찾기
+          BEFORE_SHA="${{ github.event.before }}"
+          AFTER_SHA="${{ github.event.after }}"
           
-          # 공통 로직
+          # 최대 5개의 커밋 메시지 가져오기 (마크다운 포맷으로)
           COMMIT_LIST=$(git log -n 5 --pretty=format:"- %s" ${BEFORE_SHA}..${AFTER_SHA})
           TOTAL_COMMITS=$(git rev-list --count ${BEFORE_SHA}..${AFTER_SHA})
           
-          # 결과 저장
-          echo "author=$AUTHOR" >> $GITHUB_OUTPUT
+          # PR 병합인지 일반 푸시인지 확인
+          if grep -q "Merge pull request" <<< "$(git log -1 --pretty=%s ${AFTER_SHA})"; then
+            EVENT_TYPE="병합됨"
+          else
+            EVENT_TYPE="푸시됨"
+          fi
+          
+          echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
           echo "event_type=$EVENT_TYPE" >> $GITHUB_OUTPUT
-          echo "url=$DETAIL_URL" >> $GITHUB_OUTPUT
+          echo "url=${{ github.event.head_commit.url }}" >> $GITHUB_OUTPUT
           echo "total_commits=$TOTAL_COMMITS" >> $GITHUB_OUTPUT
+          
+          # 멀티라인 출력을 위한 특수 구문
           echo "message<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMIT_LIST" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -56,9 +49,8 @@ jobs:
             
             👤 사용자: *${{ steps.commit-details.outputs.author }}*
             📝 이벤트: *${{ steps.commit-details.outputs.event_type }}*
-            ${{ github.event_name == 'pull_request' && format('🔖 PR 제목: *{0}*', steps.commit-details.outputs.pr_title) || '' }}
             
-            📋 커밋 목록 (${{ steps.commit-details.outputs.total_commits }}개 중 최대 5개):
+            📋 커밋 목록:
             ${{ steps.commit-details.outputs.message }}
             
             🔗 [상세 정보 보기](${{ steps.commit-details.outputs.url }})
