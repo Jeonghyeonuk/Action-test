@@ -17,22 +17,25 @@ jobs:
           BEFORE_SHA="${{ github.event.before }}"
           AFTER_SHA="${{ github.event.after }}"
           
-          # 모든 커밋 메시지 가져오기 (마크다운 포맷으로)
-          COMMIT_LIST=$(git log --pretty=format:"- %s" ${BEFORE_SHA}..${AFTER_SHA})
+          # 최신 커밋 메시지 가져오기
+          LATEST_COMMIT_MSG=$(git log -1 --pretty=%s ${AFTER_SHA})
+          echo "Latest commit message: $LATEST_COMMIT_MSG" 
           
           # 기본 URL 설정 (일반 푸시 URL)
           DETAIL_URL="${{ github.event.head_commit.url }}"
           
           # PR 병합인지 확인하고 PR 번호 추출
-          MERGE_COMMIT_MSG=$(git log -1 --pretty=%s ${AFTER_SHA})
-          if [[ "$MERGE_COMMIT_MSG" =~ "Merge pull request #([0-9]+)" ]]; then
+          if [[ "$LATEST_COMMIT_MSG" =~ Merge\ pull\ request\ \#([0-9]+) ]]; then
             PR_NUMBER=${BASH_REMATCH[1]}
             # PR URL 생성
             DETAIL_URL="${{ github.server_url }}/${{ github.repository }}/pull/${PR_NUMBER}"
+            echo "PR detected: #$PR_NUMBER, URL: $DETAIL_URL"
           fi
           
+          # 모든 커밋 메시지 가져오기 (마크다운 포맷으로)
+          COMMIT_LIST=$(git log --pretty=format:"- %s" ${BEFORE_SHA}..${AFTER_SHA})
+          
           echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
-          echo "event_type=$EVENT_TYPE" >> $GITHUB_OUTPUT
           echo "url=$DETAIL_URL" >> $GITHUB_OUTPUT
           
           # 멀티라인 출력을 위한 특수 구문
