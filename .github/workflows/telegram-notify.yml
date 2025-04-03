@@ -49,9 +49,9 @@ jobs:
           token: ${{ secrets.TELEGRAM_TOKEN }}
           format: markdown
           message: |
-            🔔 Repository: *${{ github.repository }}*
-            👤 User: *${{ steps.commit-details.outputs.author }}*
-            📋 Commit Messages:
+            🔔 레포지토리: *${{ github.repository }}*
+            👤 유저: *${{ steps.commit-details.outputs.author }}*
+            📋 커밋 메시지:
             ${{ steps.commit-details.outputs.message }}
             
-            🔗 [View Details](${{ steps.commit-details.outputs.url }})
+            🔗 [Details](${{ steps.commit-details.outputs.url }})
