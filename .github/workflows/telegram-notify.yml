@@ -2,7 +2,6 @@ name: Telegram Notifications
 on:
   push:
     branches: [ dev ]
-  # pull_request 부분 제거됨
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -18,21 +17,26 @@ jobs:
           BEFORE_SHA="${{ github.event.before }}"
           AFTER_SHA="${{ github.event.after }}"
           
-          # 최대 5개의 커밋 메시지 가져오기 (마크다운 포맷으로)
-          COMMIT_LIST=$(git log -n 5 --pretty=format:"- %s" ${BEFORE_SHA}..${AFTER_SHA})
-          TOTAL_COMMITS=$(git rev-list --count ${BEFORE_SHA}..${AFTER_SHA})
+          # 모든 커밋 메시지 가져오기 (마크다운 포맷으로)
+          COMMIT_LIST=$(git log --pretty=format:"- %s" ${BEFORE_SHA}..${AFTER_SHA})
           
-          # PR 병합인지 일반 푸시인지 확인
-          if grep -q "Merge pull request" <<< "$(git log -1 --pretty=%s ${AFTER_SHA})"; then
+          # 기본 URL 설정 (일반 푸시 URL)
+          DETAIL_URL="${{ github.event.head_commit.url }}"
+          
+          # PR 병합인지 확인하고 PR 번호 추출
+          MERGE_COMMIT_MSG=$(git log -1 --pretty=%s ${AFTER_SHA})
+          if [[ "$MERGE_COMMIT_MSG" =~ "Merge pull request #([0-9]+)" ]]; then
+            PR_NUMBER=${BASH_REMATCH[1]}
             EVENT_TYPE="병합됨"
+            # PR URL 생성
+            DETAIL_URL="${{ github.server_url }}/${{ github.repository }}/pull/${PR_NUMBER}"
           else
             EVENT_TYPE="푸시됨"
           fi
           
           echo "author=$(git log -1 --pretty=%an)" >> $GITHUB_OUTPUT
           echo "event_type=$EVENT_TYPE" >> $GITHUB_OUTPUT
-          echo "url=${{ github.event.head_commit.url }}" >> $GITHUB_OUTPUT
-          echo "total_commits=$TOTAL_COMMITS" >> $GITHUB_OUTPUT
+          echo "url=$DETAIL_URL" >> $GITHUB_OUTPUT
           
           # 멀티라인 출력을 위한 특수 구문
           echo "message<<EOF" >> $GITHUB_OUTPUT
@@ -49,7 +53,6 @@ jobs:
             
             👤 사용자: *${{ steps.commit-details.outputs.author }}*
             📝 이벤트: *${{ steps.commit-details.outputs.event_type }}*
-            
             📋 커밋 목록:
             ${{ steps.commit-details.outputs.message }}
             
